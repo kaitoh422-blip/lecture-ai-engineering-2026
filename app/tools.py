@@ -98,6 +98,36 @@ def search_materials(query: str) -> str:
         return json.dumps({"error": api_error_message(e.code), "results": []}, ensure_ascii=False)
 
 
+
+def search_materials_with_neighbors(query: str) -> str:
+    """第1〜3回の講義資料を検索し、検索ページと同じ資料の前後1ページを返す。
+
+    ページ単体では説明が不足する可能性がある質問で使う。
+    queryには調べたい内容を指定する。重複ページは除外される。
+    """
+    import sqlite3
+
+    from google.genai.errors import APIError
+
+    from app.retrieval import search_with_neighbors
+
+    try:
+        return json.dumps(
+            {"results": search_with_neighbors(query, radius=1)},
+            ensure_ascii=False,
+        )
+    except (ValueError, FileNotFoundError, sqlite3.Error) as e:
+        return json.dumps(
+            {"error": str(e), "results": []},
+            ensure_ascii=False,
+        )
+    except APIError as e:
+        return json.dumps(
+            {"error": api_error_message(e.code), "results": []},
+            ensure_ascii=False,
+        )
+
+
 def browse_tree(node_id: str | None = None) -> str:
     """目次とページの先頭文を返す。ページIDを指定すると全文を返す。
 

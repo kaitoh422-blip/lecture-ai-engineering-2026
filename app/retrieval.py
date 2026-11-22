@@ -138,6 +138,66 @@ def search(query: str) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+
+def search_with_neighbors(query: str, radius: int = 1) -> list[dict]:
+    """ベクトル検索結果に、同じ資料の前後ページを追加して返す。
+
+    検索で見つかったページを先に返し、その後に同じdocument_idの
+    前後radiusページを追加する。page_idが同じページは重複させない。
+    """
+    if not isinstance(radius, int) or radius < 0:
+        raise ValueError("radiusには0以上の整数を指定してください。")
+
+    hits = search(query)
+    pages = load_pages(RAG_SOURCE)
+
+    pages_by_document_and_number = {
+        (page["document_id"], page["page"]): page
+        for page in pages
+    }
+
+    results = []
+    seen = set()
+
+    # 最初に通常検索で見つかったページを、検索順位どおり追加する。
+    for hit in hits:
+        page_id = hit["page_id"]
+        if page_id in seen:
+            continue
+
+        results.append({
+            **hit,
+            "relation": "match",
+            "seed_page_id": page_id,
+        })
+        seen.add(page_id)
+
+    # 次に、それぞれの検索結果と同じ資料の前後ページを追加する。
+    for hit in hits:
+        document_id = hit["document_id"]
+        page_number = hit["page"]
+
+        for offset in range(-radius, radius + 1):
+            if offset == 0:
+                continue
+
+            neighbor = pages_by_document_and_number.get(
+                (document_id, page_number + offset)
+            )
+            if neighbor is None or neighbor["page_id"] in seen:
+                continue
+
+            results.append({
+                **neighbor,
+                "distance": None,
+                "relation": "neighbor",
+                "seed_page_id": hit["page_id"],
+            })
+            seen.add(neighbor["page_id"])
+
+    return results
+
+
 def search_graph(query: str) -> dict:
     """ベクトル検索を入口に、前後ページと共通用語で候補を広げる。"""
     pages = {page["page_id"]: page for page in load_pages(RAG_SOURCE)}
